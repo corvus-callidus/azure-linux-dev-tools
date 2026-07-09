@@ -260,6 +260,34 @@ func TestComponentOverlay_Validate(t *testing.T) {
 			errorExpected: true,
 			errorContains: "lines",
 		},
+		// file-append-lines tests
+		{
+			name: "file-append-lines valid",
+			overlay: projectconfig.ComponentOverlay{
+				Type:     projectconfig.ComponentOverlayAppendLinesToFile,
+				Filename: "test.txt",
+				Lines:    []string{"# Footer"},
+			},
+			errorExpected: false,
+		},
+		{
+			name: "file-append-lines missing file",
+			overlay: projectconfig.ComponentOverlay{
+				Type:  projectconfig.ComponentOverlayAppendLinesToFile,
+				Lines: []string{"# Footer"},
+			},
+			errorExpected: true,
+			errorContains: "file",
+		},
+		{
+			name: "file-append-lines missing lines",
+			overlay: projectconfig.ComponentOverlay{
+				Type:     projectconfig.ComponentOverlayAppendLinesToFile,
+				Filename: "test.txt",
+			},
+			errorExpected: true,
+			errorContains: "lines",
+		},
 		// file-search-replace tests
 		{
 			name: "file-search-replace valid",
@@ -508,6 +536,7 @@ func TestComponentOverlay_ModifiesSpec(t *testing.T) {
 
 	nonSpecOverlayTypes := []projectconfig.ComponentOverlayType{
 		projectconfig.ComponentOverlayPrependLinesToFile,
+		projectconfig.ComponentOverlayAppendLinesToFile,
 		projectconfig.ComponentOverlaySearchAndReplaceInFile,
 		projectconfig.ComponentOverlayAddFile,
 	}

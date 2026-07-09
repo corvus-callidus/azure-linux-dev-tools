@@ -433,6 +433,80 @@ func TestApplyNonSpecOverlay(t *testing.T) {
 			errorExpected: true,
 		},
 		{
+			name: "append lines to file",
+			overlay: projectconfig.ComponentOverlay{
+				Type:     projectconfig.ComponentOverlayAppendLinesToFile,
+				Filename: "test.txt",
+				Lines:    []string{"# Appended line", "# Second line"},
+			},
+			existingFile: "original content\n",
+			result:       "original content\n# Appended line\n# Second line\n",
+		},
+		{
+			name: "append lines to file without trailing newline",
+			overlay: projectconfig.ComponentOverlay{
+				Type:     projectconfig.ComponentOverlayAppendLinesToFile,
+				Filename: "test.txt",
+				Lines:    []string{"# Appended line"},
+			},
+			existingFile: "no trailing newline",
+			result:       "no trailing newline\n# Appended line\n",
+		},
+		{
+			name: "append lines to non-existent file",
+			overlay: projectconfig.ComponentOverlay{
+				Type:     projectconfig.ComponentOverlayAppendLinesToFile,
+				Filename: "does-not-exist.txt",
+				Lines:    []string{"# Footer"},
+			},
+			errorExpected: true,
+		},
+		{
+			name: "append to spec file is rejected",
+			overlay: projectconfig.ComponentOverlay{
+				Type:     projectconfig.ComponentOverlayAppendLinesToFile,
+				Filename: "test.spec",
+				Lines:    []string{"# Footer"},
+			},
+			existingFile:  "Name: test\n",
+			errorExpected: true,
+		},
+		{
+			name: "append lines to CRLF file uses LF for the appended payload",
+			overlay: projectconfig.ComponentOverlay{
+				Type:     projectconfig.ComponentOverlayAppendLinesToFile,
+				Filename: "test.txt",
+				Lines:    []string{"line3"},
+			},
+			existingFile: "line1\r\nline2\r\n",
+			result:       "line1\r\nline2\r\nline3\n",
+		},
+		{
+			// A single trailing blank line is consumed by the appended final line:
+			// the appended line replaces the trailing blank, leaving no blank at the end.
+			name: "append lines consumes a single trailing blank line",
+			overlay: projectconfig.ComponentOverlay{
+				Type:     projectconfig.ComponentOverlayAppendLinesToFile,
+				Filename: "test.txt",
+				Lines:    []string{"# Appended line"},
+			},
+			existingFile: "original content\n\n",
+			result:       "original content\n# Appended line\n",
+		},
+		{
+			// With multiple trailing blank lines, exactly one is consumed by the
+			// appended final line; the rest are preserved before it. (N=5 newlines
+			// -> 4 before the appended line + 1 terminator, 0 blank lines at the end.)
+			name: "append lines consumes one of multiple trailing blank lines",
+			overlay: projectconfig.ComponentOverlay{
+				Type:     projectconfig.ComponentOverlayAppendLinesToFile,
+				Filename: "test.txt",
+				Lines:    []string{"# Appended line"},
+			},
+			existingFile: "original content\n\n\n\n\n",
+			result:       "original content\n\n\n\n# Appended line\n",
+		},
+		{
 			name: "search and replace in file",
 			overlay: projectconfig.ComponentOverlay{
 				Type:        projectconfig.ComponentOverlaySearchAndReplaceInFile,
@@ -548,6 +622,30 @@ func TestApplyNonSpecOverlay(t *testing.T) {
 			assert.Equal(t, testCase.result, string(resultContent))
 		})
 	}
+
+	// An empty (but existing) file exercises the len(fileContents)==0 branch: no
+	// separator newline is inserted, so the result has no leading blank line.
+	t.Run("append lines to empty file", func(t *testing.T) {
+		ctx := testctx.NewCtx()
+		testFS := ctx.FS()
+
+		sourceDir := "/sources"
+		require.NoError(t, testFS.MkdirAll(sourceDir, fileperms.PublicDir))
+		filePath := sourceDir + "/empty.txt"
+		require.NoError(t, fileutils.WriteFile(testFS, filePath, []byte(""), fileperms.PublicFile))
+
+		overlay := projectconfig.ComponentOverlay{
+			Type:     projectconfig.ComponentOverlayAppendLinesToFile,
+			Filename: "empty.txt",
+			Lines:    []string{"# Appended line"},
+		}
+
+		require.NoError(t, sources.ApplyOverlayToSources(ctx, testFS, overlay, sourceDir, ""))
+
+		content, err := fileutils.ReadFile(testFS, filePath)
+		require.NoError(t, err)
+		assert.Equal(t, "# Appended line\n", string(content))
+	})
 }
 
 func TestApplyDestructiveNonSpecOverlay(t *testing.T) {

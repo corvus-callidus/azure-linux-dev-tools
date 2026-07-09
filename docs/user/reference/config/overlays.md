@@ -42,6 +42,7 @@ successfully makes a replacement to at least one matching file.
 | Type | Description | Required Fields | Interpretation of `file` field |
 |------|-------------|-----------------|--------------------------------|
 | `file-prepend-lines` | Prepends lines to a file | `file`, `lines` | Glob pattern for files to transform |
+| `file-append-lines` | Appends lines to a file | `file`, `lines` | Glob pattern for files to transform |
 | `file-search-replace` | Regex-based search and replace on a file | `file`, `regex` | Glob pattern for files to transform |
 | `file-add` | Copies a new file from a source location; **fails if destination already exists** | `file`, `source` | Name of destination file |
 | `file-remove` | Removes a file | `file` | Glob pattern for files to remove |
@@ -59,8 +60,8 @@ successfully makes a replacement to at least one matching file.
 | Package | `package` | The sub-package name for multi-package specs; omit to target the main package. Cannot be combined with an omitted `section` (a sub-package is always a sub-qualifier of a section). | All spec overlays (optional, except `spec-remove-subpackage` which **requires** it) |
 | Regex | `regex` | Regular expression pattern to match | `spec-search-replace`, `file-search-replace` |
 | Replacement | `replacement` | Literal replacement text; capture group references like `$1` are **not** expanded. Omit or leave empty to delete matched text. | `spec-search-replace`, `file-search-replace`, `file-rename` |
-| Lines | `lines` | Array of text lines to insert | `spec-prepend-lines`, `spec-append-lines`, `file-prepend-lines` |
-| File | `file` | The name of the non-spec file to modify or add | `file-prepend-lines`, `file-search-replace`, `file-add`, `file-remove`, `file-rename`, `patch-add` (optional), `patch-remove` |
+| Lines | `lines` | Array of text lines to insert | `spec-prepend-lines`, `spec-append-lines`, `file-prepend-lines`, `file-append-lines` |
+| File | `file` | The name of the non-spec file to modify or add | `file-prepend-lines`, `file-append-lines`, `file-search-replace`, `file-add`, `file-remove`, `file-rename`, `patch-add` (optional), `patch-remove` |
 | Source | `source` | Path to source file for `file-add` and `patch-add`; relative paths are relative to the config file that defines the overlay (the overlay file if loaded via [`overlay-files`](#per-file-overlay-format), otherwise the component config) | `file-add`, `patch-add` |
 | Metadata | `metadata` | Documentation table describing intent and provenance — see [Overlay Metadata](#overlay-metadata). Not allowed inside an overlay file loaded via `overlay-files` (the file-level `[metadata]` block applies to every overlay in the file). | All (optional) |
 
@@ -389,6 +390,24 @@ value = "Shared libraries for mypackage"
 type = "file-prepend-lines"
 file = "Makefile"
 lines = ["# Modified by azldev overlay", "EXTRA_FLAGS := -O2"]
+```
+
+### Appending Lines to a Non-Spec File
+
+The appended lines become the new final line(s) of the file, ending with a single
+trailing newline and no trailing blank line. If the file ends in a run of newlines
+(i.e. one or more trailing blank lines), exactly one of those newlines is consumed by
+the newly appended final line and the rest are preserved before it; at least one newline
+is always kept so the appended content starts on its own line. For example, a file ending
+in `content\n\n\n\n\n` becomes `content\n\n\n\n<appended>\n`. The appended lines are
+always terminated with LF (`\n`); appending to a file that uses CRLF line endings
+therefore introduces LF-terminated lines.
+
+```toml
+[[components.mypackage.overlays]]
+type = "file-append-lines"
+file = "sbat.csv.in"
+lines = ["grub.azurelinux,1,Microsoft,grub2,@@VERSION_RELEASE@@,https://github.com/microsoft/azurelinux"]
 ```
 
 ### Search and Replace in a File

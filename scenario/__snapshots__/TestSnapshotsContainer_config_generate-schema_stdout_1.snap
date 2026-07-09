@@ -226,6 +226,7 @@
             "patch-add",
             "patch-remove",
             "file-prepend-lines",
+            "file-append-lines",
             "file-search-replace",
             "file-add",
             "file-remove",

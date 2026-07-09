@@ -17,7 +17,7 @@ import (
 // ComponentOverlay represents an overlay that may be applied to a component's spec and/or its sources.
 type ComponentOverlay struct {
 	// The type of overlay to apply.
-	Type ComponentOverlayType `toml:"type" json:"type" validate:"required" jsonschema:"enum=spec-add-tag,enum=spec-insert-tag,enum=spec-set-tag,enum=spec-update-tag,enum=spec-remove-tag,enum=spec-prepend-lines,enum=spec-append-lines,enum=spec-search-replace,enum=spec-remove-section,enum=spec-remove-subpackage,enum=patch-add,enum=patch-remove,enum=file-prepend-lines,enum=file-search-replace,enum=file-add,enum=file-remove,enum=file-rename,title=Overlay type,description=The type of overlay to apply"`
+	Type ComponentOverlayType `toml:"type" json:"type" validate:"required" jsonschema:"enum=spec-add-tag,enum=spec-insert-tag,enum=spec-set-tag,enum=spec-update-tag,enum=spec-remove-tag,enum=spec-prepend-lines,enum=spec-append-lines,enum=spec-search-replace,enum=spec-remove-section,enum=spec-remove-subpackage,enum=patch-add,enum=patch-remove,enum=file-prepend-lines,enum=file-append-lines,enum=file-search-replace,enum=file-add,enum=file-remove,enum=file-rename,title=Overlay type,description=The type of overlay to apply"`
 	// Human readable description of overlay; primarily present to document the need for the change.
 	Description string `toml:"description,omitempty" json:"description,omitempty" jsonschema:"title=Description,description=Human readable description of overlay" fingerprint:"-"`
 
@@ -136,6 +136,7 @@ func (c *ComponentOverlay) ModifiesSpec() bool {
 // those also require non-spec modifications.
 func (c *ComponentOverlay) ModifiesNonSpecFiles() bool {
 	return c.Type == ComponentOverlayPrependLinesToFile ||
+		c.Type == ComponentOverlayAppendLinesToFile ||
 		c.Type == ComponentOverlaySearchAndReplaceInFile ||
 		c.Type == ComponentOverlayAddFile ||
 		c.Type == ComponentOverlayRemoveFile ||
@@ -186,6 +187,8 @@ const (
 	ComponentOverlayRemovePatch ComponentOverlayType = "patch-remove"
 	// ComponentOverlayPrependLinesToFile is an overlay that prepends lines to a non-spec file.
 	ComponentOverlayPrependLinesToFile ComponentOverlayType = "file-prepend-lines"
+	// ComponentOverlayAppendLinesToFile is an overlay that appends lines to a non-spec file.
+	ComponentOverlayAppendLinesToFile ComponentOverlayType = "file-append-lines"
 	// ComponentOverlaySearchAndReplaceInFile is an overlay that replaces text in a non-spec file.
 	ComponentOverlaySearchAndReplaceInFile ComponentOverlayType = "file-search-replace"
 	// ComponentOverlayAddFile is an overlay that adds a non-spec file.
@@ -226,7 +229,7 @@ func (c *ComponentOverlay) validateRequiredFields(desc string) error {
 		return c.validateSpecLineOverlay(desc)
 	case ComponentOverlaySearchAndReplaceInSpec:
 		return c.validateSpecSearchReplaceOverlay(desc)
-	case ComponentOverlayPrependLinesToFile, ComponentOverlaySearchAndReplaceInFile:
+	case ComponentOverlayPrependLinesToFile, ComponentOverlayAppendLinesToFile, ComponentOverlaySearchAndReplaceInFile:
 		return c.validateFileOverlay(desc)
 	case ComponentOverlayAddFile:
 		return c.validateAddFileOverlay(desc)
@@ -282,7 +285,7 @@ func (c *ComponentOverlay) validateFileOverlay(desc string) error {
 		return err
 	}
 
-	if c.Type == ComponentOverlayPrependLinesToFile {
+	if c.Type == ComponentOverlayPrependLinesToFile || c.Type == ComponentOverlayAppendLinesToFile {
 		if len(c.Lines) == 0 {
 			return fmt.Errorf("overlay type %#q requires %#q field: %s", c.Type, "lines", desc)
 		}

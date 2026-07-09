@@ -279,6 +279,7 @@ func applyNonSpecOverlayToMatchingFiles(
 
 func overlayTypeSupportsMultipleFiles(overlayType projectconfig.ComponentOverlayType) bool {
 	return overlayType == projectconfig.ComponentOverlayPrependLinesToFile ||
+		overlayType == projectconfig.ComponentOverlayAppendLinesToFile ||
 		overlayType == projectconfig.ComponentOverlaySearchAndReplaceInFile ||
 		overlayType == projectconfig.ComponentOverlayRemoveFile ||
 		overlayType == projectconfig.ComponentOverlayRemovePatch
@@ -297,6 +298,11 @@ func applyNonSpecOverlayToFile(
 		err := prependLinesToFile(destFS, filePath, overlay.Lines)
 		if err != nil {
 			return fmt.Errorf("failed to prepend lines to file %#q:\n%w", filePath, err)
+		}
+	case projectconfig.ComponentOverlayAppendLinesToFile:
+		err := appendLinesToFile(destFS, filePath, overlay.Lines)
+		if err != nil {
+			return fmt.Errorf("failed to append lines to file %#q:\n%w", filePath, err)
 		}
 	case projectconfig.ComponentOverlaySearchAndReplaceInFile:
 		err := searchAndReplaceInFile(destFS, filePath, overlay.Regex, overlay.Replacement)
@@ -382,6 +388,71 @@ func prependLinesToFile(destFS opctx.FS, filePath string, lines []string) error 
 	}
 
 	newContents := append([]byte(strings.Join(lines, "\n")+"\n"), fileContents...)
+
+	if err := fileutils.WriteFile(destFS, filePath, newContents, originalPerm); err != nil {
+		return fmt.Errorf("failed to write file %#q to apply overlay:\n%w", filePath, err)
+	}
+
+	return nil
+}
+
+// appendLinesToFile appends the given lines to the specified file, mutating the file in-place.
+// The appended lines become the new final line(s) of the file, ending with a single trailing
+// newline (no trailing blank line). If the original file ended in a run of newlines, exactly one
+// of them is consumed by the newly appended final line and the rest are preserved before it; at
+// least one newline is always kept so the appended text starts on its own line.
+func appendLinesToFile(destFS opctx.FS, filePath string, lines []string) error {
+	slog.Debug("Appending lines to file", "filePath", filePath, "lines", lines)
+
+	// As a precaution, make sure we're not being asked to modify a .spec file. To update a spec,
+	// a spec-specific overlay should be used.
+	if isSpecFile(filePath) {
+		return fmt.Errorf("file appending not supported on .spec file %#q", filePath)
+	}
+
+	// Get original file permissions to preserve them after writing.
+	fileInfo, err := destFS.Stat(filePath)
+	if err != nil {
+		return fmt.Errorf("failed to stat file %#q to preserve permissions:\n%w", filePath, err)
+	}
+
+	originalPerm := fileInfo.Mode().Perm()
+
+	fileContents, err := fileutils.ReadFile(destFS, filePath)
+	if err != nil {
+		return fmt.Errorf("failed to read file %#q to apply overlay:\n%w", filePath, err)
+	}
+
+	appended := strings.Join(lines, "\n") + "\n"
+
+	var newContents []byte
+	if len(fileContents) == 0 {
+		// Empty file: there is no last content line to terminate, so just write
+		// the appended lines (no leading blank line).
+		newContents = []byte(appended)
+	} else {
+		// The appended lines become the new final line(s), ending in a single
+		// newline. If the file ended in a run of newlines, one of them is consumed
+		// by the appended final line; the surplus are preserved before it. At least
+		// one newline is always kept so the appended text starts on its own line.
+		// This caps the file at zero trailing blank lines after the appended content.
+		trailingNewlines := 0
+		for i := len(fileContents) - 1; i >= 0 && fileContents[i] == '\n'; i-- {
+			trailingNewlines++
+		}
+
+		separatorNewlines := trailingNewlines - 1
+		if separatorNewlines < 1 {
+			separatorNewlines = 1
+		}
+
+		body := fileContents[:len(fileContents)-trailingNewlines]
+
+		newContents = make([]byte, 0, len(body)+separatorNewlines+len(appended))
+		newContents = append(newContents, body...)
+		newContents = append(newContents, strings.Repeat("\n", separatorNewlines)...)
+		newContents = append(newContents, appended...)
+	}
 
 	if err := fileutils.WriteFile(destFS, filePath, newContents, originalPerm); err != nil {
 		return fmt.Errorf("failed to write file %#q to apply overlay:\n%w", filePath, err)
